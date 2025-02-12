@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Url } from './model/Url';
@@ -18,6 +18,9 @@ export class UrlService {
   async shortenUrl(originalUrl: string, customAlias?: string, topic?: string): Promise<{}> {
     if (customAlias) {
       const existingUrl = await this.urlRepo.findOne({ where: { shortCode: customAlias } });
+
+      Logger.log("UrlService  -> shortenUrl()  -> existingUrl");
+      Logger.log(existingUrl);
       if (existingUrl) {
         // Generate alternative suggestions
         const suggestedAliases = this.generateAliasSuggestions(customAlias);
@@ -27,12 +30,15 @@ export class UrlService {
           suggestions: suggestedAliases.map(alias => `short.ly/${alias}`),
         };
       }
-    } else {
-      const shortCode = customAlias || nanoid(6); // Use custom alias if provided, else generate a unique ID
-      const newUrl = this.urlRepo.create({ originalUrl, shortCode, topic });
-      await this.urlRepo.save(newUrl);
-      return { shortUrl: `short.ly/${shortCode}` };
     }
+    const shortCode = customAlias || nanoid(6);
+    Logger.log("UrlService  -> shortenUrl()  -> shortCode");
+    Logger.log(shortCode);
+    const newUrl = this.urlRepo.create({ originalUrl, shortCode, topic });
+    Logger.log(JSON.stringify(newUrl));
+    const response = await this.urlRepo.save(newUrl);
+    return { shortUrl: `short.ly/${shortCode}`, createdAt: response.createdAt };
+
   }
 
 
@@ -41,7 +47,7 @@ export class UrlService {
     return randomSuffixes.map(suffix => `${baseAlias}${suffix}`);
   }
 
-  
+
   /**
    * @desc Retrieves the original URL from a given short URL if the URL exist else return.
    * @param {string} shortCode - The shortened URL identifier.
