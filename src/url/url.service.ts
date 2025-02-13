@@ -1,12 +1,30 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Url } from './model/Url';
+import { DataSource, Repository } from 'typeorm';
+import { Url } from './entity/Url.entity';
 import { nanoid } from 'nanoid'; // Generates unique short codes
+import { AudienceData } from './entity/audience.entity';
+import { Injectable, InternalServerErrorException, Logger, NotFoundException, Req } from '@nestjs/common';
+import * as useragent from 'express-useragent';
+import * as geoip from 'geoip-lite';
 
+/**
+ * @class UrlService
+ * @desc Service layer for URL shortening and redirection.
+ * @param {Repository<Url>} urlRepo - The URL repository.
+ * @param {Repository<AudienceData>} audienceRepository - The audience data repository.
+ * @param {DataSource} dataSource - The data source for transactions.
+ * @method shortenUrl - Generates a short URL for a given long URL.
+ * @method generateAliasSuggestions - Generates alternative alias suggestions.
+ * @method getOriginalUrlWithClientTracking - Retrieves the original URL from a short URL and tracks client information.
+ */
 @Injectable()
 export class UrlService {
-  constructor(@InjectRepository(Url) private urlRepo: Repository<Url>) { } // Injects the URL repository
+  constructor(
+    @InjectRepository(Url) private urlRepo: Repository<Url>,
+    @InjectRepository(AudienceData) private audienceRepository: Repository<AudienceData>,
+    private dataSource: DataSource, // Inject DataSource for transactions
+
+  ) { } // Injects the URL repository
 
   /**
    * @desc Generates a short URL for a given long URL.
@@ -16,6 +34,7 @@ export class UrlService {
    * @returns {Promise<string>} - Returns the short URL identifier.
    */
   async shortenUrl(originalUrl: string, customAlias?: string, topic?: string): Promise<{}> {
+    const BASE_URL = 'http://localhost:3000';
     if (customAlias) {
       const existingUrl = await this.urlRepo.findOne({ where: { shortCode: customAlias } });
 
@@ -37,29 +56,67 @@ export class UrlService {
     const newUrl = this.urlRepo.create({ originalUrl, shortCode, topic });
     Logger.log(JSON.stringify(newUrl));
     const response = await this.urlRepo.save(newUrl);
-    return { shortUrl: `short.ly/${shortCode}`, createdAt: response.createdAt };
-
+    return { shortUrl: `${BASE_URL}/api/shorten/${shortCode}`, createdAt: response.createdAt };
   }
 
 
+/**
+ * @desc Generates alternative alias suggestions based on a given base alias.
+ * @param {string} baseAlias - The base alias to generate suggestions from.
+ * @returns {string[]} - Returns an array of suggested aliases.
+ */
   generateAliasSuggestions(baseAlias: string): string[] {
     const randomSuffixes = Array.from({ length: 3 }, () => Math.random().toString(36).substring(2, 4));
     return randomSuffixes.map(suffix => `${baseAlias}${suffix}`);
   }
 
-
   /**
-   * @desc Retrieves the original URL from a given short URL if the URL exist else return.
-   * @param {string} shortCode - The shortened URL identifier.
-   * @returns {Promise<string | null>}
-   */
-  async getOriginalUrl(shortCode: string): Promise<string | null> {
-    const url = await this.urlRepo.findOne({ where: { shortCode } });
-    if (url) {
-      url.clicks++;
-      await this.urlRepo.save(url);
-      return url.originalUrl;
-    }
-    return null;
+ * @desc Retrieves the original URL from a given short URL and tracks client information.
+ * @param {string} shortCode - The shortened URL identifier.
+ * @param {Request} req - The HTTP request object containing client information.
+ * @returns {Promise<string | null>} - Returns the original URL if found, otherwise null.
+ * @throws {NotFoundException} - Throws if the short URL is not found.
+ * @throws {InternalServerErrorException} - Throws if there is an error during the transaction.
+ */
+  async getOriginalUrlWithClientTracking(shortCode: string, @Req() req): Promise<string | null> {
+    return this.dataSource.transaction(async (manager) => {
+      try {
+        // Fetch the URL from the database
+        const urlData = await manager.findOne(Url, { where: { shortCode } });
+        if (!urlData) {
+          throw new NotFoundException('Short URL not found');
+        }
+
+        // Parse user agent details
+        const userAgent = useragent.parse(req.headers['user-agent']);
+        const ip = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        const geo = geoip.lookup(ip as string); // Get location details
+
+        const audienceData = {
+          userAgent: req.headers['user-agent'],
+          ip: ip,
+          browser: userAgent.browser,
+          os: userAgent.os,
+          device: userAgent.isMobile ? 'Mobile' : userAgent.isTablet ? 'Tablet' : 'Desktop',
+          location: geo ? `${geo.city}, ${geo.country}` : 'Unknown',
+          timestamp: new Date(),
+          url: urlData
+        };
+
+        Logger.log(audienceData);
+
+        // Log the redirect inside the transaction
+        const audienceLog = manager.create(AudienceData, audienceData);
+        await manager.save(AudienceData, audienceLog);
+
+        await manager.increment(Url, { id: urlData.id }, "clicks", 1);
+
+        // Redirect user
+        return urlData.originalUrl;
+      } catch (error) {
+        Logger.error('Redirect error:', error);
+        throw new InternalServerErrorException(error.message);
+      }
+    });
   }
 }

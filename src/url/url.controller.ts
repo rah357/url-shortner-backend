@@ -1,7 +1,10 @@
-import { Controller, Post, Get, Param, Body, Res, NotFoundException, ValidationPipe, UsePipes, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, Res, NotFoundException, ValidationPipe, UsePipes, UseGuards, Req, createParamDecorator, ExecutionContext, InternalServerErrorException } from '@nestjs/common';
 import { UrlService } from './url.service';
 import { ShortenUrlDto } from './dto/url.dto';
 import { JwtAuthGuard } from 'src/auth/jwt.guard';
+
+
+
 
 @Controller("/api/shorten")
 export class UrlController {
@@ -14,6 +17,8 @@ export class UrlController {
    * @body {string} [customAlias] - Optional custom short URL alias.
    * @body {string} [topic] - Optional category for the URL.
    * @returns {object} - Shortened URL.
+   * @throws {BadRequestException} - If the long URL is invalid.
+   * @throws {ConflictException} - If the custom alias is already in use. 
    */
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -26,15 +31,20 @@ export class UrlController {
 
 
    /**
-   * @route GET /:shortCode
-   * @desc Redirects a short URL to its original URL.
-   * @param {string} shortCode - The shortened URL identifier.
-   * @returns {Redirect} - Redirects the user to the original URL.
-   */
-   @Get(':shortCode')
-   async redirect(@Param('shortCode') shortCode: string, @Res() res) {
-     const originalUrl = await this.urlService.getOriginalUrl(shortCode);
-     if (!originalUrl) throw new NotFoundException('URL not found');
-     return res.redirect(originalUrl);
-   }
+    * @route GET /:shortCode
+    * @desc Redirects a short URL to its original URL.
+    * @param headers
+    * @param {string} shortCode - The shortened URL identifier.
+    * @returns {Redirect} - Redirects the user to the original URL.
+    * @throws {NotFoundException} - If the short URL does not exist.
+    * @throws {InternalServerErrorException} - If there is an error retrieving the original URL.
+    * @throws {InternalServerErrorException} - If there is an error tracking the URL visit. 
+    */
+  @Get(':shortCode')
+  async redirectToLongUrl(
+    headers: { 'user-agent': string },
+    @Param('shortCode') shortCode: string, @Req() req, @Res() res) {
+    const originalUrl = await this.urlService.getOriginalUrlWithClientTracking(shortCode, req);
+    return res.redirect(originalUrl);
+  }
 }

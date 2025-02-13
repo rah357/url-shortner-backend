@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
+import { AudienceData } from './audience.entity';
 
 @Entity()
 export class Url {
@@ -19,4 +20,7 @@ export class Url {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @OneToMany(() => AudienceData, (audienceData) => audienceData.url)
+  audienceData: AudienceData[];
 }
