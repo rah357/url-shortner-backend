@@ -11,7 +11,7 @@ export class AuthController {
 
   @Get('google/redirect')
   @UseGuards(AuthGuard('google'))
-  googleAuthRedirect(@Req() req) {
+  googleAuthRedirect(@Req() req: any) {
     return { message: 'Login successful', token: req.user.token };
   }
 }
