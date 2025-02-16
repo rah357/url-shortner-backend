@@ -3,7 +3,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entity/User.entity';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { GoogleStrategy } from './google-strategy/google.strategy';
 import { JwtAuthGuard } from './jwt.guard';
 
@@ -19,8 +19,5 @@ import { JwtAuthGuard } from './jwt.guard';
   providers: [AuthService, GoogleStrategy, JwtAuthGuard],
   controllers: [AuthController],
   exports: [AuthService, JwtAuthGuard, JwtModule], // Export Guard and AuthService
-
 })
-export class AuthModule { }
-
-
+export class AuthModule {}

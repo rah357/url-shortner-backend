@@ -1,10 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+} from 'typeorm';
 import { Url } from './Url.entity'; // Adjust the path based on your structure
 
 @Entity()
 export class AudienceData {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column()
   ip: string;
@@ -24,6 +30,9 @@ export class AudienceData {
   @CreateDateColumn()
   accessedAt: Date;
 
-  @ManyToOne(() => Url, (url) => url.audienceData, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Url, (url) => url.audienceData, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
   url: Url;
 }

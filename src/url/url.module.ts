@@ -5,10 +5,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Url } from './entity/Url.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { AudienceData } from './entity/audience.entity';
+import { User } from 'src/auth/entity/User.entity';
+import { RedisService } from 'src/cache/redis.provider';
 
 @Module({
-  imports: [AuthModule, TypeOrmModule.forFeature([Url]), TypeOrmModule.forFeature([AudienceData])],
-  providers: [UrlService],
-  controllers: [UrlController]
+  imports: [
+    AuthModule,
+    TypeOrmModule.forFeature([Url]),
+    TypeOrmModule.forFeature([AudienceData]),
+    TypeOrmModule.forFeature([User]),
+  ],
+  providers: [UrlService, RedisService],
+  controllers: [UrlController],
 })
 export class UrlModule {}
